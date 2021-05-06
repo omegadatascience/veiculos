@@ -5,22 +5,6 @@ library(tidyverse)
 
 tb <- readRDS("data/vehicle.rds")
 
-tb <- tb %>%
-    mutate(
-        model =  stringr::str_replace(spec, "^\\w+ (\\w+) .*", "\\1"),
-        model = tolower(model),
-        
-        brand = stringr::str_replace(spec, "^(\\w+) .*", "\\1"),
-        brand = tolower(brand),
-
-        year = stringr::str_extract(spec, "\\d{4}/\\d{4}"),
-        year = stringr::str_sub(year, end = 4),
-        year = as.integer(year),
-
-        location = stringr::str_remove(usercity, "^.*- "),
-        uf = stringr::str_sub(location, start = -2)
-    )
-
 # ===================================================================
 # Crawler functions
 # ===================================================================
@@ -72,7 +56,7 @@ get_versions <- function(id_model, id_year) {
 }
 
 get_vehicle <- function(nome, email, uf, id_brand, id_model, id_year, id_version) {
-    body <- stringr::str_interp("anoModelo=${id_year}&email=${email}&marca=${id_brand}&modelo=${id_model}&nome=${nome}&uf={uf}&valorselecionado=meucarro&versao=${id_version}")
+    body <- stringr::str_interp("anoModelo=${id_year}&el=mai${email}&marca=${id_brand}&modelo=${id_model}&nome=${nome}&uf={uf}&valorselecionado=meucarro&versao=${id_version}")
 
     page <- httr::POST(
 
@@ -131,7 +115,7 @@ scrap_vehicle <- function(id_brand, id_model, id_year, id_version) {
 tb_brand <- get_brand()
 
 tb_brand <- tb_brand %>%
-    dplyr::filter(brand %in% unique(tb$brand))
+    dplyr::filter(brand %in% tolower(unique(tb$brand)))
 
 tb_params <- tibble::tibble()
 
@@ -139,13 +123,13 @@ for (.x in split(tb_brand, tb_brand$id_brand)) {
     tb_models <- get_models(.x$id_brand)
     tb_models <- .x %>%
         dplyr::left_join(tb_models, by = "id_brand") %>%
-        dplyr::filter(model %in% (op %>% dplyr::filter(brand == .x[["brand"]]) %>% dplyr::pull(model) %>% unique()))
+        dplyr::filter(model %in% (tb %>% dplyr::filter(tolower(brand) == .x[["brand"]]) %>% dplyr::pull(model) %>% unique() %>% tolower()))
 
     for (.y in split(tb_models, tb_models$id_model)) {
         tb_years <- get_years(.y$id_model)
         tb_years <- .y %>%
-            dplyr::left_join(tb_years, by = "id_model") %>% 
-            dplyr::filter(id_year %in% (op %>% dplyr::filter(brand == .y[["brand"]] & model == .y[["model"]]) %>% dplyr::pull(year) %>% unique()))
+            dplyr::left_join(tb_years, by = "id_model") %>%
+            dplyr::filter(id_year %in% (tb %>% dplyr::filter(tolower(brand) == .y[["brand"]] & tolower(model) == .y[["model"]]) %>% dplyr::pull(year) %>% unique()))
         
         for (.z in split(tb_years, tb_years$id_year)) {
             Sys.sleep(runif(1, 0, 5))
@@ -185,6 +169,9 @@ tb_scrap <- purrr::map(split(tb_params, 1:nrow(tb_params)), ~ scrap_vehicle(.x$i
     dplyr::bind_rows()
 
 params <- tb_params %>%
-    dplyr::left_join(tb_scrap, by = c("id_brand", "id_model", "id_year", "id_version"))
+    dplyr::left_join(
+        tb_scrap,
+        by = c("id_brand", "id_model", "id_year", "id_version")
+    )
 
 saveRDS(params, "data/params.rds")
