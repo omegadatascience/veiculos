@@ -16,7 +16,7 @@ fipe <- fipe %>%
         value = as.numeric(value),
         version = tolower(version),
         year = as.numeric(year)
-    ) %>% 
+    ) %>%
     dplyr::distinct(brand, model, year, version, value) %>%
     tidyr::drop_na()
 
@@ -27,10 +27,10 @@ data <- data %>%
         v2 = trimws(stringr::str_extract(version, "\\w+\\s(?=[0-9]\\.[0-9])")),
         v2 = trimws(stringr::str_replace(v2, model, "")),
         v2 = ifelse(v2 == "", NA, v2)
-    ) 
+    )
 
 # ===================================================================
-# Regressão linear para estravassar os valores (1980:2017)
+# Regressão linear para extravagar os valores (1980:2017)
 # ===================================================================
 fipe <- fipe %>%
     mutate(
@@ -40,18 +40,18 @@ fipe <- fipe %>%
         v2 = ifelse(v2 == "", NA, v2)
     ) %>%
     arrange(v2) %>%
-    # filter(model == "celta" & v == "1.0" & v2 == "lt") %>% 
+    # filter(model == "celta" & v == "1.0" & v2 == "lt") %>%
     group_by(brand, model, v, v2) %>%
-    group_split() %>% 
+    group_split() %>%
     map(function(x) {
         m0 <- lm(value ~ year, data = x)
         x_hat <- tibble(year = 1980:2017)
         x_hat$value_hat <- predict(m0, newdata = x_hat)
-        x %>% 
-            select(brand, model, v, v2, year, value) %>% 
-            full_join(x_hat, by = "year") %>% 
+        x %>%
+            select(brand, model, v, v2, year, value) %>%
+            full_join(x_hat, by = "year") %>%
             mutate(brand = unique(brand)[1], model = unique(model)[1], v = unique(v)[1], v2 = unique(v2)[1])
-    }) %>% 
+    }) %>%
     bind_rows()
 
 # ===================================================================
@@ -60,12 +60,12 @@ fipe <- fipe %>%
 data2 <- data %>%
     left_join(
         fipe %>%
-            group_by(brand, model, year, v, v2) %>% 
+            group_by(brand, model, year, v, v2) %>%
             summarise(
-                price = mean(value), 
-                price_sd = sd(value), 
-                price_hat = mean(value_hat), 
-                price_hat_sd = sd(value_hat), 
+                price = mean(value),
+                price_sd = sd(value),
+                price_hat = mean(value_hat),
+                price_hat_sd = sd(value_hat),
                 n = n(),
             ),
         by = c("brand", "model", "year", "v", "v2")
@@ -88,34 +88,38 @@ data3 <- data2 %>%
     filter(is.na(price_hat)) %>%
     left_join(
         fipe %>%
-            group_by(brand, model, year, v) %>% 
+            group_by(brand, model, year, v) %>%
             summarise(
-                price_v2 = mean(value), 
-                price_sd_v2 = sd(value), 
-                price_hat_v2 = mean(value_hat), 
-                price_hat_sd_v2 = sd(value_hat), 
+                price_v2 = mean(value),
+                price_sd_v2 = sd(value),
+                price_hat_v2 = mean(value_hat),
+                price_hat_sd_v2 = sd(value_hat),
                 n_v2 = n(),
             ),
         by = c("brand", "model", "year", "v")
-    ) %>% 
+    ) %>%
     bind_rows(
         data2 %>%
             filter(!is.na(price_hat))
     )
 
 # Não encontrou na fipe
-data3 %>% 
-    filter(is.na(price_hat_v2))
-
 data3 %>%
-    filter(is.na(price_hat)) %>%
-    pull(price_hat_sd_v2) %>% 
-    hist
+    filter(is.na(price_hat_v2) & is.na(price_hat) & is.na(price))
 
-data3 %>%
-    filter(is.na(price_hat)) %>%
-    pull(price_sd_v2) %>% 
-    hist
+data3 <- data3 %>%
+    dplyr::mutate(
+        price_master = dplyr::case_when(
+            !is.na(price) ~ price,
+            !is.na(price_hat) ~ price_hat,
+            !is.na(price_hat_v2) ~ price_hat_v2
+        ),
+        price_master_sd = dplyr::case_when(
+            !is.na(price_sd) ~ price_sd,
+            !is.na(price_hat_sd) ~ price_hat_sd,
+            !is.na(price_hat_sd_v2) ~ price_hat_sd_v2
+        )
+    )
 
-data3 %>% 
-    filter(model == "palio" & v == "1.0" & year == "2011")
+data3 <- data3 %>%
+    dplyr::filter(!is.na(price_master))
