@@ -12,8 +12,6 @@ extract_components <- function(object, factor) {
   return(composicao)
 }
 
-
-
 ## Calcula a nota para cada fator
 compute_score <- function(object, factor, data) {
   comp <- extract_components(object = object, factor = factor)
